@@ -1,0 +1,6 @@
+{
+  "name": "Recovery Routine Planner",
+  "description": "Your gentle companion for mental recovery and sustainable self-care.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,65 @@
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..900;1,9..144,300..900&family=Nunito:ital,wght@0,300;0,400;0,500;0,600;0,700;0,800;1,400&display=swap');
+
+@theme {
+  --font-sans: "Nunito", ui-sans-serif, system-ui, sans-serif;
+  --font-serif: "Fraunces", Georgia, serif;
+  
+  --color-sage-50: #f4f6f3;
+  --color-sage-100: #e9ece6;
+  --color-sage-200: #d2dbcd;
+  --color-sage-300: #b0bfab;
+  --color-sage-400: #a3b899; /* Main Sage Green #A3B899 */
+  --color-sage-500: #889f7e;
+  --color-sage-600: #687e5f;
+  
+  --color-lavender-50: #f7f6f8;
+  --color-lavender-100: #eeebf1;
+  --color-lavender-200: #dcd7e3;
+  --color-lavender-300: #c1b9cc;
+  --color-lavender-400: #b8b5c7; /* Main Lavender #B8B5C7 */
+  --color-lavender-500: #9994ae;
+  --color-lavender-600: #7a7593;
+  
+  --color-coral-50: #fef7f7;
+  --color-coral-100: #fdf0f1;
+  --color-coral-200: #fcd8db;
+  --color-coral-300: #f6b5ba;
+  --color-coral-400: #e8b4b8; /* Main Coral #E8B4B8 */
+  --color-coral-500: #d59095;
+  --color-coral-600: #bf6d73;
+  
+  --color-cream: #faf8f5; /* Warm off-white #FAF8F5 */
+  --color-ink: #4a4e4d; /* Warm organic charcoal #4A4E4D */
+  --color-ink-light: #737877;
+  --color-ink-dark: #2d302f;
+  
+  --shadow-organic: 0 10px 25px -5px rgba(163, 184, 153, 0.12), 0 8px 10px -6px rgba(163, 184, 153, 0.12);
+  --shadow-organic-hover: 0 20px 35px -5px rgba(163, 184, 153, 0.22), 0 12px 15px -8px rgba(163, 184, 153, 0.22);
+}
+
+/* Custom styles for comfortable scrolling and animations */
+body {
+  background-color: var(--color-cream);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(74, 78, 77, 0.15);
+  border-radius: 9999px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(74, 78, 77, 0.25);
+}
