@@ -3,6 +3,7 @@ import path from "path";
 import dotenv from "dotenv";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
+import { generateBotResponse } from "./src/chatBotLogic";
 
 dotenv.config();
 
@@ -38,9 +39,8 @@ app.get("/api/health", (req, res) => {
 
 // Empathetic Chatbot API Route
 app.post("/api/chat", async (req, res) => {
+  const { message, history, userName } = req.body || {};
   try {
-    const { message, history, userName } = req.body;
-
     if (!message) {
       return res.status(400).json({ error: "Message is required." });
     }
@@ -75,42 +75,6 @@ Guidelines for your voice and behavior:
 CRITICAL: You must respond ONLY with raw JSON matching the specified schema. Never include any introductory text, concluding text, markdown code block ticks, or preamble like "Here is the JSON requested". Start directly with '{' and end with '}'.`;
 
     const prompt = `Context of past conversation:\n${contextHistory}\n\nLatest user message: "${message}"\n\nPlease respond to the user as Noor. Output ONLY the raw JSON schema without any markdown formatting, backticks, or preamble.`;
-
-    const ai = getAiClient();
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-      config: {
-        systemInstruction,
-        responseMimeType: "application/json",
-        maxOutputTokens: 800,
-        temperature: 0.7,
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            text: {
-              type: Type.STRING,
-              description: "The comforting, deeply personalized, yet concise response from Noor."
-            },
-            isCrisis: {
-              type: Type.BOOLEAN,
-              description: "True only if immediate self-harm, suicide, or crisis is detected."
-            },
-            suggestions: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: "2 to 3 short contextually-appropriate suggestion chips (1-4 words each)."
-            }
-          },
-          required: ["text", "isCrisis", "suggestions"]
-        }
-      }
-    });
-
-    const botResponseText = response.text;
-    if (!botResponseText) {
-      throw new Error("No response text from Gemini API.");
-    }
 
     // Helper function to extract JSON from potentially messy model output
     const extractJSON = (text: string): any => {
@@ -149,25 +113,76 @@ CRITICAL: You must respond ONLY with raw JSON matching the specified schema. Nev
       throw new Error(`Could not parse JSON from response: "${text.substring(0, 100)}..."`);
     };
 
-    const botJSON = extractJSON(botResponseText);
+    const modelsToTry = ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
+    let botJSON: any = null;
+    let apiCallSuccessful = false;
+    const ai = getAiClient();
+
+    for (const model of modelsToTry) {
+      try {
+        console.log(`[Companion Bot] Attempting chat with model: ${model}`);
+        const response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            systemInstruction,
+            responseMimeType: "application/json",
+            maxOutputTokens: 800,
+            temperature: 0.7,
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                text: {
+                  type: Type.STRING,
+                  description: "The comforting, deeply personalized, yet concise response from Noor."
+                },
+                isCrisis: {
+                  type: Type.BOOLEAN,
+                  description: "True only if immediate self-harm, suicide, or crisis is detected."
+                },
+                suggestions: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description: "2 to 3 short contextually-appropriate suggestion chips (1-4 words each)."
+                }
+              },
+              required: ["text", "isCrisis", "suggestions"]
+            }
+          }
+        });
+
+        const botResponseText = response.text;
+        if (botResponseText) {
+          botJSON = extractJSON(botResponseText);
+          apiCallSuccessful = true;
+          console.log(`[Companion Bot] Successfully generated response using model: ${model}`);
+          break; // successfully got response and parsed JSON!
+        }
+      } catch (err: any) {
+        console.warn(`[Companion Bot] Model ${model} failed or returned invalid JSON: ${err?.message || err}. Trying next model...`);
+      }
+    }
+
+    // If API failed for all models, trigger the local fallback response system
+    if (!apiCallSuccessful || !botJSON) {
+      console.warn("[Companion Bot] All Gemini API models failed. Activating local companion fallback logic.");
+      botJSON = generateBotResponse(message, history || [], userName || "friend");
+    }
+
     res.json(botJSON);
 
   } catch (error: any) {
     console.error("Gemini API Error in /api/chat:", error);
-    const errMsg = error?.message || String(error);
-    
-    let userFriendlyMsg = "I'm here, and I'm listening. I'm having a little trouble connecting with my thoughts right now, but please take a gentle deep breath with me. You are doing enough.";
-    if (errMsg.includes("API key") || errMsg.includes("API_KEY") || errMsg.includes("key not valid") || errMsg.includes("invalid")) {
-      userFriendlyMsg = "I hear you, but the GEMINI_API_KEY configured is invalid or expired. Please check your API key settings.";
-    } else {
-      userFriendlyMsg = `I'm here, listening. I ran into an error: "${errMsg}". Please take a gentle breath with me. You are doing enough.`;
+    try {
+      const fallbackJSON = generateBotResponse(message || "", history || [], userName || "friend");
+      res.json(fallbackJSON);
+    } catch (fallbackErr) {
+      res.json({
+        text: "I'm here, and I'm listening. Let's take a slow, gentle breath together.",
+        isCrisis: false,
+        suggestions: ["Try 1-Min Breathing Space", "Suggest a calming tip"]
+      });
     }
-
-    res.json({
-      text: userFriendlyMsg,
-      isCrisis: false,
-      suggestions: ["Try 1-Min Breathing Space", "Suggest a calming tip"]
-    });
   }
 });
 

@@ -133,6 +133,8 @@ export default function AuthScreen({ onAuthSuccess, onRegistrationSuccess }: Aut
     exit: { opacity: 0, y: -20 }
   };
 
+  const isIOS = typeof navigator !== 'undefined' && /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
   return (
     <div className="min-h-screen bg-cream flex items-center justify-center p-4 md:p-6 select-none">
       <div className="w-full max-w-md bg-white border border-sage-200/60 rounded-[2rem] p-6 md:p-8 shadow-organic relative overflow-hidden">
@@ -166,28 +168,30 @@ export default function AuthScreen({ onAuthSuccess, onRegistrationSuccess }: Aut
             className="space-y-4"
           >
             {/* Username Field */}
-            <div className="space-y-1.5">
-              <label className="text-[10px] font-bold text-ink-light uppercase tracking-widest block">
-                Username
-              </label>
-              <div className="relative">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-light/50">
-                  <User size={16} />
-                </span>
-                <input
-                  id="auth-username-input"
-                  type="text"
-                  value={username}
-                  onChange={(e) => {
-                    setUsername(e.target.value);
-                    if (errorMessage) setErrorMessage('');
-                  }}
-                  placeholder="Enter your username..."
-                  required={isSignUp}
-                  className="w-full bg-cream/40 border border-sage-200 hover:border-sage-300 focus:border-sage-400 focus:bg-white rounded-2xl py-3 pl-11 pr-4 text-ink placeholder-ink-light/40 text-xs outline-none transition-all font-semibold"
-                />
+            {isSignUp && (
+              <div className="space-y-1.5">
+                <label className="text-[10px] font-bold text-ink-light uppercase tracking-widest block">
+                  Username
+                </label>
+                <div className="relative">
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 text-ink-light/50">
+                    <User size={16} />
+                  </span>
+                  <input
+                    id="auth-username-input"
+                    type="text"
+                    value={username}
+                    onChange={(e) => {
+                      setUsername(e.target.value);
+                      if (errorMessage) setErrorMessage('');
+                    }}
+                    placeholder="Enter your username..."
+                    required={isSignUp}
+                    className="w-full bg-cream/40 border border-sage-200 hover:border-sage-300 focus:border-sage-400 focus:bg-white rounded-2xl py-3 pl-11 pr-4 text-ink placeholder-ink-light/40 text-xs outline-none transition-all font-semibold"
+                  />
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Email Field */}
             <div className="space-y-1.5">
@@ -296,6 +300,15 @@ export default function AuthScreen({ onAuthSuccess, onRegistrationSuccess }: Aut
               <Chrome size={16} className="text-sage-500" />
               <span>Continue with Google</span>
             </button>
+
+            {/* iOS/Safari Mobile Friendly Troubleshooting Advice */}
+            {isIOS && (
+              <div className="p-3 bg-sage-50/70 border border-sage-100 rounded-2xl text-left">
+                <p className="text-[10px] text-sage-700 leading-relaxed font-semibold">
+                  ✨ <strong>iPhone / iPad Tip:</strong> If Google Sign-In popup gets blocked by Safari, please use the <strong>Email & Password</strong> option above, or tap the button in the top right to open this app in a full browser tab.
+                </p>
+              </div>
+            )}
           </motion.form>
         </AnimatePresence>
 

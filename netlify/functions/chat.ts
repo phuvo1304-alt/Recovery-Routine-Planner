@@ -1,4 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
+import { generateBotResponse } from "../../src/chatBotLogic";
 
 let aiClient: GoogleGenAI | null = null;
 
@@ -101,42 +102,6 @@ CRITICAL: You must respond ONLY with raw JSON matching the specified schema. Nev
 
     const prompt = `Context of past conversation:\n${contextHistory}\n\nLatest user message: "${message}"\n\nPlease respond to the user as Noor. Output ONLY the raw JSON schema without any markdown formatting, backticks, or preamble.`;
 
-    const ai = getAiClient();
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-      config: {
-        systemInstruction,
-        responseMimeType: "application/json",
-        maxOutputTokens: 800,
-        temperature: 0.7,
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            text: {
-              type: Type.STRING,
-              description: "The comforting, deeply personalized, yet concise response from Noor."
-            },
-            isCrisis: {
-              type: Type.BOOLEAN,
-              description: "True only if immediate self-harm, suicide, or crisis is detected."
-            },
-            suggestions: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING },
-              description: "2 to 3 short contextually-appropriate suggestion chips (1-4 words each)."
-            }
-          },
-          required: ["text", "isCrisis", "suggestions"]
-        }
-      }
-    });
-
-    const botResponseText = response.text;
-    if (!botResponseText) {
-      throw new Error("No response text from Gemini API.");
-    }
-
     // Helper function to extract JSON from potentially messy model output
     const extractJSON = (text: string): any => {
       const trimmed = text.trim();
@@ -174,7 +139,61 @@ CRITICAL: You must respond ONLY with raw JSON matching the specified schema. Nev
       throw new Error(`Could not parse JSON from response: "${text.substring(0, 100)}..."`);
     };
 
-    const botJSON = extractJSON(botResponseText);
+    const modelsToTry = ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
+    let botJSON: any = null;
+    let apiCallSuccessful = false;
+    const ai = getAiClient();
+
+    for (const model of modelsToTry) {
+      try {
+        console.log(`[Companion Bot] Attempting chat with model: ${model}`);
+        const response = await ai.models.generateContent({
+          model,
+          contents: prompt,
+          config: {
+            systemInstruction,
+            responseMimeType: "application/json",
+            maxOutputTokens: 800,
+            temperature: 0.7,
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                text: {
+                  type: Type.STRING,
+                  description: "The comforting, deeply personalized, yet concise response from Noor."
+                },
+                isCrisis: {
+                  type: Type.BOOLEAN,
+                  description: "True only if immediate self-harm, suicide, or crisis is detected."
+                },
+                suggestions: {
+                  type: Type.ARRAY,
+                  items: { type: Type.STRING },
+                  description: "2 to 3 short contextually-appropriate suggestion chips (1-4 words each)."
+                }
+              },
+              required: ["text", "isCrisis", "suggestions"]
+            }
+          }
+        });
+
+        const botResponseText = response.text;
+        if (botResponseText) {
+          botJSON = extractJSON(botResponseText);
+          apiCallSuccessful = true;
+          console.log(`[Companion Bot] Successfully generated response using model: ${model}`);
+          break; // successfully got response and parsed JSON!
+        }
+      } catch (err: any) {
+        console.warn(`[Companion Bot] Model ${model} failed or returned invalid JSON: ${err?.message || err}. Trying next model...`);
+      }
+    }
+
+    // If API failed for all models, trigger the local fallback response system
+    if (!apiCallSuccessful || !botJSON) {
+      console.warn("[Companion Bot] All Gemini API models failed. Activating local companion fallback logic.");
+      botJSON = generateBotResponse(message, history || [], userName || "friend");
+    }
 
     return {
       statusCode: 200,
