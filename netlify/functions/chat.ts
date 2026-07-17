@@ -135,7 +135,44 @@ Guidelines for your voice and behavior:
       throw new Error("No response text from Gemini API.");
     }
 
-    const botJSON = JSON.parse(botResponseText.trim());
+    // Helper function to extract JSON from potentially messy model output
+    const extractJSON = (text: string): any => {
+      const trimmed = text.trim();
+      
+      // 1. Try direct parsing
+      try {
+        return JSON.parse(trimmed);
+      } catch (e) {
+        // Continue to extraction
+      }
+
+      // 2. Try to extract JSON from code block
+      const markdownRegex = /```(?:json)?\s*([\s\S]*?)\s*```/;
+      const match = trimmed.match(markdownRegex);
+      if (match && match[1]) {
+        try {
+          return JSON.parse(match[1].trim());
+        } catch (e) {
+          // Continue
+        }
+      }
+
+      // 3. Try to find first '{' and last '}'
+      const startIdx = trimmed.indexOf('{');
+      const endIdx = trimmed.lastIndexOf('}');
+      if (startIdx !== -1 && endIdx !== -1 && endIdx > startIdx) {
+        const candidate = trimmed.substring(startIdx, endIdx + 1);
+        try {
+          return JSON.parse(candidate);
+        } catch (e) {
+          // Continue
+        }
+      }
+
+      throw new Error(`Could not parse JSON from response: "${text.substring(0, 100)}..."`);
+    };
+
+    const botJSON = extractJSON(botResponseText);
 
     return {
       statusCode: 200,
