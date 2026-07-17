@@ -48,6 +48,7 @@ import BreathingSpace from './components/BreathingSpace';
 import NoorChat from './components/NoorChat';
 import AuthScreen from './components/AuthScreen';
 import VerificationScreen from './components/VerificationScreen';
+import { LowEnergyCat, SteadyCat, RestlessCat } from './components/MorningIntentionIcons';
 
 // Firebase import
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
@@ -110,6 +111,13 @@ export default function App() {
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isChatTyping, setIsChatTyping] = useState(false);
 
+  // Morning Intention state
+  const [morningIntention, setMorningIntention] = useState<{
+    date: string;
+    choice: 'low' | 'steady' | 'restless';
+    suggestion: string;
+  } | null>(null);
+
   // Firebase authentication state listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -148,6 +156,7 @@ export default function App() {
       setJournalEntries([]);
       setRoutines([]);
       setActiveRecoverySteps([]);
+      setMorningIntention(null);
       return;
     }
 
@@ -225,6 +234,18 @@ export default function App() {
       setActiveRecoverySteps([]);
     }
 
+    // 6. Morning Intention load
+    const storedMorningIntention = localStorage.getItem(`${STORAGE_PREFIX}${uid}_morning_intention`);
+    if (storedMorningIntention) {
+      try {
+        setMorningIntention(JSON.parse(storedMorningIntention));
+      } catch (e) {
+        setMorningIntention(null);
+      }
+    } else {
+      setMorningIntention(null);
+    }
+
     // Pick a random journal prompt
     rotateJournalPrompt();
 
@@ -268,6 +289,82 @@ export default function App() {
     setProfile(newProfile);
     saveToLocalStorage('profile', newProfile);
     showToast(`Welcome, ${newProfile.name}. We're so glad you are here.`);
+  };
+
+  // --- MORNING INTENTION METHODS ---
+
+  const handleSelectMorningIntention = (choice: 'low' | 'steady' | 'restless', suggestion: string) => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const newIntention = {
+      date: todayStr,
+      choice,
+      suggestion
+    };
+    setMorningIntention(newIntention);
+    saveToLocalStorage('morning_intention', newIntention);
+
+    // 1. Trigger micro-celebration confetti
+    triggerConfetti();
+
+    // 2. Add tailored recovery task to list so it is actively tracked in Today's Recovery Plan
+    const taskText = choice === 'low' 
+      ? "Rest guilt-free: Treat 10% progress as 100% today." 
+      : choice === 'steady' 
+        ? "Steady pacing: Flow gently without pushing past limits." 
+        : "Grounding pause: Take tasks one tiny breath at a time.";
+    
+    const taskCategory = choice === 'low' ? 'energy' : choice === 'steady' ? 'general' : 'stress';
+
+    // Check if task already exists to prevent duplicate addition
+    if (!activeRecoverySteps.some(step => step.text === taskText)) {
+      const newStep: RecoveryStep = {
+        id: `morning-step-${Date.now()}`,
+        text: taskText,
+        completed: false,
+        category: taskCategory as any
+      };
+      const updatedSteps = [newStep, ...activeRecoverySteps];
+      setActiveRecoverySteps(updatedSteps);
+      saveToLocalStorage('recovery_steps', updatedSteps);
+    }
+
+    // 3. Inject into chat history so Noor's conversation tab is aware
+    const welcomeMsg = chatMessages[0] || { id: 'welcome-noor', sender: 'noor', text: "Hello! I am Noor, your gentle companion.", timestamp: Date.now() };
+    setChatMessages([
+      welcomeMsg,
+      {
+        id: `msg-user-morning-${Date.now()}`,
+        sender: 'user',
+        text: `My energy feels: ${choice === 'low' ? 'Low Energy' : choice === 'steady' ? 'Steady' : 'Restless'}.`,
+        timestamp: Date.now()
+      },
+      {
+        id: `msg-noor-morning-${Date.now()}`,
+        sender: 'noor',
+        text: suggestion,
+        timestamp: Date.now(),
+        suggestions: ["Try 1-Min Breathing Space", "Let's chat"]
+      }
+    ]);
+
+    showToast(`Your morning intention is set: ${choice === 'low' ? 'Low Energy' : choice === 'steady' ? 'Steady' : 'Restless'} flow.`);
+  };
+
+  const handleResetMorningIntention = () => {
+    setMorningIntention(null);
+    if (authUser) {
+      localStorage.removeItem(`${STORAGE_PREFIX}${authUser.uid}_morning_intention`);
+    } else {
+      localStorage.removeItem(`${STORAGE_PREFIX}morning_intention`);
+    }
+    // Remove morning step task from recovery list
+    const filteredSteps = activeRecoverySteps.filter(
+      step => !step.id.startsWith('morning-step-')
+    );
+    setActiveRecoverySteps(filteredSteps);
+    saveToLocalStorage('recovery_steps', filteredSteps);
+
+    showToast("Morning intention reset. You can now select a different choice to test!");
   };
 
   // Submit today's check-in
@@ -698,6 +795,7 @@ export default function App() {
       localStorage.removeItem(`${STORAGE_PREFIX}${uid}_journals`);
       localStorage.removeItem(`${STORAGE_PREFIX}${uid}_routines`);
       localStorage.removeItem(`${STORAGE_PREFIX}${uid}_recovery_steps`);
+      localStorage.removeItem(`${STORAGE_PREFIX}${uid}_morning_intention`);
     } else {
       localStorage.clear();
     }
@@ -713,6 +811,7 @@ export default function App() {
     setJournalEntries([]);
     setRoutines(DEFAULT_ROUTINES);
     setActiveRecoverySteps([]);
+    setMorningIntention(null);
     setChatMessages([{
       id: 'welcome-noor',
       sender: 'noor',
@@ -899,6 +998,84 @@ export default function App() {
                       <span>Breathing Space</span>
                     </button>
                   </div>
+                </div>
+              </div>
+
+              {/* MORNING INTENTION SETTING CARD */}
+              <div id="morning-intention-card" className="bg-gradient-to-br from-coral-50/20 via-white to-sage-50/30 border border-sage-100/80 rounded-[2rem] p-6 relative overflow-hidden shadow-organic animate-in fade-in duration-500">
+                {/* Sunrise theme color bar banner (coral, rose-gold, sage dawn) */}
+                <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-coral-300 via-rose-200 to-sage-300" />
+                <div className="relative z-10">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-coral-600 uppercase tracking-widest bg-coral-50/80 border border-coral-100/50 px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow-sm font-sans">
+                      <Sun size={11} className="text-coral-500 fill-coral-500/20" />
+                      Morning Intention Setting
+                    </span>
+                    {morningIntention && (
+                      <button
+                        onClick={handleResetMorningIntention}
+                        className="text-[9px] font-bold text-sage-600 hover:text-sage-700 bg-sage-50 hover:bg-sage-100 px-2.5 py-1 rounded-full border border-sage-200/40 shadow-sm transition-all cursor-pointer"
+                      >
+                        Reset & Test Others
+                      </button>
+                    )}
+                  </div>
+
+                  <h3 className="text-base md:text-lg font-serif font-semibold text-ink-dark tracking-tight mt-4">
+                    {morningIntention ? "Today's energy flow is set" : "How does your energy feel today?"}
+                  </h3>
+
+                  {!morningIntention ? (
+                    <>
+                      <p className="text-ink-light text-xs mt-1.5 leading-relaxed font-semibold">
+                        Good morning. Noor is listening. Select the option that best mirrors your internal state right now to get your daily suggestion.
+                      </p>
+
+                      <div className="grid grid-cols-3 gap-2.5 mt-4">
+                        <button
+                          id="morning-energy-low"
+                          onClick={() => handleSelectMorningIntention('low', "Today, let's treat 10% progress as 100%. Be extra kind to yourself.")}
+                          className="bg-gradient-to-b from-white to-sage-50/20 hover:bg-sage-50/50 border border-sage-100/60 hover:border-sage-300/80 text-ink p-3 rounded-2xl text-xs font-semibold shadow-sm transition-all flex flex-col items-center justify-center gap-1 cursor-pointer hover:scale-[1.02] active:scale-98"
+                        >
+                          <LowEnergyCat />
+                          <span className="text-[11px] font-bold text-sage-800 tracking-tight">Low Energy</span>
+                        </button>
+
+                        <button
+                          id="morning-energy-steady"
+                          onClick={() => handleSelectMorningIntention('steady', "Flow gently today. Maintain a steady pace without pushing past your natural limits.")}
+                          className="bg-gradient-to-b from-white to-lavender-50/20 hover:bg-lavender-50/50 border border-lavender-100/60 hover:border-lavender-300/80 text-ink p-3 rounded-2xl text-xs font-semibold shadow-sm transition-all flex flex-col items-center justify-center gap-1 cursor-pointer hover:scale-[1.02] active:scale-98"
+                        >
+                          <SteadyCat />
+                          <span className="text-[11px] font-bold text-lavender-800 tracking-tight">Steady</span>
+                        </button>
+
+                        <button
+                          id="morning-energy-restless"
+                          onClick={() => handleSelectMorningIntention('restless', "When the mind spins, let's ground the feet. Take tasks one tiny breath at a time today.")}
+                          className="bg-gradient-to-b from-white to-coral-50/20 hover:bg-coral-50/50 border border-coral-100/60 hover:border-coral-300/80 text-ink p-3 rounded-2xl text-xs font-semibold shadow-sm transition-all flex flex-col items-center justify-center gap-1 cursor-pointer hover:scale-[1.02] active:scale-98"
+                        >
+                          <RestlessCat />
+                          <span className="text-[11px] font-bold text-coral-800 tracking-tight">Restless</span>
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="mt-4 p-5 bg-gradient-to-br from-sage-50/40 to-cream border border-sage-100/60 rounded-2xl relative overflow-hidden shadow-sm animate-in zoom-in-95 duration-300">
+                      <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-sage-300/60 via-lavender-200/60 to-coral-300/60" />
+                      <div className="flex gap-4 items-start relative z-10">
+                        <span className="text-3xl shrink-0 mt-0.5 select-none animate-bounce">🌸</span>
+                        <div className="space-y-1.5">
+                          <p className="text-[9px] font-bold text-sage-600 uppercase tracking-widest font-sans">
+                            Noor's guidance for your {morningIntention.choice === 'low' ? 'Low Energy' : morningIntention.choice === 'steady' ? 'Steady' : 'Restless'} flow
+                          </p>
+                          <p className="text-lg md:text-xl font-serif font-medium italic text-ink-dark leading-relaxed pr-2">
+                            "{morningIntention.suggestion}"
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
