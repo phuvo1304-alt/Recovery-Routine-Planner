@@ -54,6 +54,9 @@ import { LowEnergyCat, SteadyCat, RestlessCat } from './components/MorningIntent
 import { onAuthStateChanged, signOut, User } from 'firebase/auth';
 import { auth } from './firebase';
 
+// Local chatbot logic fallback
+import { generateBotResponse } from './chatBotLogic';
+
 // Key for storage
 const STORAGE_PREFIX = 'recovery_routine_';
 
@@ -742,14 +745,28 @@ export default function App() {
         setIsCrisisOpen(true);
       }
     } catch (err) {
-      console.error("Error communicating with chat API:", err);
-      // Fallback
+      console.error("Error communicating with chat API, using local client fallback:", err);
+      
+      // Compute dynamic companion reply locally as fallback
+      let fallbackText = "I am right here with you. Let's take a slow, gentle breath together.";
+      let fallbackSuggestions = ["Try 1-Min Breathing Space", "Let's sit in quiet"];
+      
+      try {
+        const fallbackRes = generateBotResponse(text, updatedMessages, profile.name || "friend");
+        fallbackText = fallbackRes.text;
+        if (fallbackRes.suggestions && fallbackRes.suggestions.length > 0) {
+          fallbackSuggestions = fallbackRes.suggestions;
+        }
+      } catch (fallbackErr) {
+        console.error("Client fallback logic failed:", fallbackErr);
+      }
+
       const botMsg: ChatMessage = {
         id: `chat-msg-noor-fallback-${Date.now()}`,
         sender: 'noor',
-        text: "I am right here holding space with you. I had a tiny glitch in my thoughts, but please take a deep breath. You are doing enough.",
+        text: fallbackText,
         timestamp: Date.now(),
-        suggestions: ["Try 1-Min Breathing Space", "Let's sit in quiet"]
+        suggestions: fallbackSuggestions
       };
       setChatMessages(prev => [...prev, botMsg]);
     } finally {

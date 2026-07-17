@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Heart, Sparkles, Mail, Lock, ArrowRight, LogIn, UserPlus, Eye, EyeOff, User, Chrome, AlertTriangle, Copy, Check } from 'lucide-react';
-import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signOut, signInWithPopup, GoogleAuthProvider } from 'firebase/auth';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, updateProfile, sendEmailVerification, signOut, signInWithPopup, GoogleAuthProvider, signInAnonymously } from 'firebase/auth';
 import { auth } from '../firebase';
 
 interface AuthScreenProps {
@@ -121,6 +121,31 @@ export default function AuthScreen({ onAuthSuccess, onRegistrationSuccess }: Aut
       } else {
         console.error("Firebase Google sign-in unexpected error:", error);
         setErrorMessage(error?.message || 'Failed to sign in with Google.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGuestSignIn = async () => {
+    setErrorMessage('');
+    setLoading(true);
+    try {
+      await signInAnonymously(auth);
+      onAuthSuccess();
+    } catch (error: any) {
+      console.warn("Firebase Anonymous Sign-In failed, falling back to local guest mock:", error);
+      try {
+        await signInWithEmailAndPassword(auth, "guest@example.com", "guest123");
+        onAuthSuccess();
+      } catch (innerErr) {
+        try {
+          const userCredential = await createUserWithEmailAndPassword(auth, "guest@example.com", "guest123");
+          await updateProfile(userCredential.user, { displayName: "Guest Companion" });
+          onAuthSuccess();
+        } catch (createErr) {
+          setErrorMessage("Failed to enter Guest Mode. Please use the Email & Password fields above.");
+        }
       }
     } finally {
       setLoading(false);
@@ -299,6 +324,18 @@ export default function AuthScreen({ onAuthSuccess, onRegistrationSuccess }: Aut
             >
               <Chrome size={16} className="text-sage-500" />
               <span>Continue with Google</span>
+            </button>
+
+            {/* Instant Guest Mode Button */}
+            <button
+              id="auth-guest-btn"
+              type="button"
+              onClick={handleGuestSignIn}
+              disabled={loading}
+              className="w-full bg-sage-50/50 hover:bg-sage-100/80 border border-sage-200 border-dashed active:scale-98 text-sage-700 font-bold py-3.5 px-6 rounded-2xl shadow-sm transition-all flex items-center justify-center gap-2 cursor-pointer text-xs uppercase tracking-wider"
+            >
+              <Sparkles size={16} className="text-sage-500" />
+              <span>Instant Guest Mode</span>
             </button>
 
             {/* iOS/Safari Mobile Friendly Troubleshooting Advice */}

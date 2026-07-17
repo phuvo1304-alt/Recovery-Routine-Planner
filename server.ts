@@ -55,12 +55,14 @@ app.post("/api/chat", async (req, res) => {
     }
 
     // Build chat context from history
-    const contextHistory = (history || [])
+    const contextHistory = (Array.isArray(history) ? history : [])
       .slice(-10) // Only take recent 10 messages to avoid context overflow and keep latency low
       .map((h: any) => {
+        if (!h || !h.text) return '';
         const senderLabel = h.sender === 'user' ? (userName || 'User') : 'Noor (companion)';
         return `${senderLabel}: ${h.text}`;
       })
+      .filter((line: string) => line !== '')
       .join("\n");
 
     const systemInstruction = `You are "Noor", a gentle, warm, wise, and deeply supportive recovery companion for someone experiencing stress, burnout, homework burden, or emotional heaviness.
@@ -113,7 +115,7 @@ CRITICAL: You must respond ONLY with raw JSON matching the specified schema. Nev
       throw new Error(`Could not parse JSON from response: "${text.substring(0, 100)}..."`);
     };
 
-    const modelsToTry = ["gemini-3.5-flash", "gemini-2.5-flash", "gemini-1.5-flash"];
+    const modelsToTry = ["gemini-3.5-flash", "gemini-3.1-pro-preview", "gemini-3.1-flash-lite"];
     let botJSON: any = null;
     let apiCallSuccessful = false;
     const ai = getAiClient();
