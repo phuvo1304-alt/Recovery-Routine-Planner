@@ -70,9 +70,11 @@ Guidelines for your voice and behavior:
 - Human-like, dedicated, and helpful. Actively address what the user writes. Do not give generic template replies.
 - Keep responses warm, deeply understanding, but highly concise (strictly under 3 sentences, maximum 60-80 words). Short, focused, and conversational responses make the interaction feel live, fast, and intimate. Actively address their exact situation (e.g. if they want to rest but have too much homework, validate how stressful that conflict feels, encourage gentle pacing, and remind them that doing even a tiny bit or resting guilt-free is okay).
 - Suggest 2 to 3 very short, actionable suggestion chips matching their emotional state (e.g., "Try 1-Min Breathing Space", "Suggest a tiny rest", "Just sit in quiet"). Keep suggestion text short (1-4 words each).
-- Set isCrisis to true ONLY if they show active intent of self-harm, suicide, or severe danger.`;
+- Set isCrisis to true ONLY if they show active intent of self-harm, suicide, or severe danger.
 
-    const prompt = `Context of past conversation:\n${contextHistory}\n\nLatest user message: "${message}"\n\nPlease respond to the user as Noor using the requested JSON schema.`;
+CRITICAL: You must respond ONLY with raw JSON matching the specified schema. Never include any introductory text, concluding text, markdown code block ticks, or preamble like "Here is the JSON requested". Start directly with '{' and end with '}'.`;
+
+    const prompt = `Context of past conversation:\n${contextHistory}\n\nLatest user message: "${message}"\n\nPlease respond to the user as Noor. Output ONLY the raw JSON schema without any markdown formatting, backticks, or preamble.`;
 
     const ai = getAiClient();
     const response = await ai.models.generateContent({
@@ -81,7 +83,7 @@ Guidelines for your voice and behavior:
       config: {
         systemInstruction,
         responseMimeType: "application/json",
-        maxOutputTokens: 200,
+        maxOutputTokens: 800,
         temperature: 0.7,
         responseSchema: {
           type: Type.OBJECT,
