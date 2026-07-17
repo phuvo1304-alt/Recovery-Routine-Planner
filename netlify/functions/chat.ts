@@ -1,14 +1,24 @@
 import { GoogleGenAI, Type } from "@google/genai";
 
-// Initialize Gemini SDK with User-Agent set for telemetry
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
+let aiClient: GoogleGenAI | null = null;
+
+function getAiClient(): GoogleGenAI {
+  if (!aiClient) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY environment variable is missing.");
     }
+    aiClient = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
   }
-});
+  return aiClient;
+}
 
 export const handler = async (event: any, context: any) => {
   // CORS Preflight
@@ -46,6 +56,29 @@ export const handler = async (event: any, context: any) => {
       };
     }
 
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return {
+        statusCode: 200,
+        headers: {
+          "Content-Type": "application/json",
+          "Access-Control-Allow-Origin": "*",
+        },
+        body: JSON.stringify({
+          text: `Hello ${userName || 'friend'}, I hear you. However, I notice that my GEMINI_API_KEY is not configured in your Netlify Environment Variables.
+
+To fix this and activate your AI companion:
+1. Go to your Netlify Dashboard.
+2. Select your site.
+3. Go to Site configuration > Environment variables.
+4. Add a variable named "GEMINI_API_KEY" with your Gemini API key value.
+5. Go to the "Deploys" tab, click "Trigger deploy", and choose "Clear cache and deploy site" to apply the changes.`,
+          isCrisis: false,
+          suggestions: ["Setup Guide Completed", "Try 1-Min Breathing Space"]
+        }),
+      };
+    }
+
     // Build chat context from history (up to last 10 messages)
     const contextHistory = (history || [])
       .slice(-10)
@@ -66,6 +99,7 @@ Guidelines for your voice and behavior:
 
     const prompt = `Context of past conversation:\n${contextHistory}\n\nLatest user message: "${message}"\n\nPlease respond to the user as Noor using the requested JSON schema.`;
 
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
       model: "gemini-3.5-flash",
       contents: prompt,
@@ -114,14 +148,23 @@ Guidelines for your voice and behavior:
 
   } catch (error: any) {
     console.error("Gemini API Error in Netlify Function:", error);
+    const errMsg = error?.message || String(error);
+    
+    let userFriendlyMsg = "I'm here, listening. I had a little trouble processing that, but please take a deep breath with me. You are doing enough.";
+    if (errMsg.includes("API key") || errMsg.includes("API_KEY") || errMsg.includes("key not valid") || errMsg.includes("invalid")) {
+      userFriendlyMsg = "I hear you, but the GEMINI_API_KEY configured on your hosting provider is invalid or expired. Please check your Netlify environment variables.";
+    } else {
+      userFriendlyMsg = `I'm here, listening. I ran into an error: "${errMsg}". Please take a gentle breath with me. You are doing enough.`;
+    }
+
     return {
-      statusCode: 500,
+      statusCode: 200,
       headers: {
         "Content-Type": "application/json",
         "Access-Control-Allow-Origin": "*",
       },
       body: JSON.stringify({
-        text: "I'm here, listening. I had a little trouble processing that, but please take a deep breath with me. You are doing enough.",
+        text: userFriendlyMsg,
         isCrisis: false,
         suggestions: ["Try 1-Min Breathing Space", "Suggest a calming tip"]
       }),

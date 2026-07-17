@@ -11,15 +11,25 @@ const PORT = 3000;
 
 app.use(express.json());
 
-// Initialize Gemini SDK with User-Agent set for telemetry
-const ai = new GoogleGenAI({
-  apiKey: process.env.GEMINI_API_KEY,
-  httpOptions: {
-    headers: {
-      'User-Agent': 'aistudio-build',
+let aiClient: GoogleGenAI | null = null;
+
+function getAiClient(): GoogleGenAI {
+  if (!aiClient) {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY environment variable is missing.");
     }
+    aiClient = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
   }
-});
+  return aiClient;
+}
 
 // API health endpoint
 app.get("/api/health", (req, res) => {
@@ -33,6 +43,15 @@ app.post("/api/chat", async (req, res) => {
 
     if (!message) {
       return res.status(400).json({ error: "Message is required." });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.json({
+        text: `Hello ${userName || 'friend'}, I hear you. However, I notice that the GEMINI_API_KEY environment variable is not configured in this local/server environment. Please make sure you have defined GEMINI_API_KEY in your settings or .env file.`,
+        isCrisis: false,
+        suggestions: ["Setup Guide", "Try 1-Min Breathing Space"]
+      });
     }
 
     // Build chat context from history
@@ -55,8 +74,9 @@ Guidelines for your voice and behavior:
 
     const prompt = `Context of past conversation:\n${contextHistory}\n\nLatest user message: "${message}"\n\nPlease respond to the user as Noor using the requested JSON schema.`;
 
+    const ai = getAiClient();
     const response = await ai.models.generateContent({
-      model: "gemini-3.1-flash-lite",
+      model: "gemini-3.5-flash",
       contents: prompt,
       config: {
         systemInstruction,
@@ -95,9 +115,17 @@ Guidelines for your voice and behavior:
 
   } catch (error: any) {
     console.error("Gemini API Error in /api/chat:", error);
-    // Provide a gentle fallback response
-    res.status(500).json({
-      text: "I'm here, and I'm listening. I'm having a little trouble connecting with my thoughts right now, but please take a gentle deep breath with me. You are doing enough.",
+    const errMsg = error?.message || String(error);
+    
+    let userFriendlyMsg = "I'm here, and I'm listening. I'm having a little trouble connecting with my thoughts right now, but please take a gentle deep breath with me. You are doing enough.";
+    if (errMsg.includes("API key") || errMsg.includes("API_KEY") || errMsg.includes("key not valid") || errMsg.includes("invalid")) {
+      userFriendlyMsg = "I hear you, but the GEMINI_API_KEY configured is invalid or expired. Please check your API key settings.";
+    } else {
+      userFriendlyMsg = `I'm here, listening. I ran into an error: "${errMsg}". Please take a gentle breath with me. You are doing enough.`;
+    }
+
+    res.json({
+      text: userFriendlyMsg,
       isCrisis: false,
       suggestions: ["Try 1-Min Breathing Space", "Suggest a calming tip"]
     });
