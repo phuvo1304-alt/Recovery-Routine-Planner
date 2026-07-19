@@ -48,10 +48,11 @@ import BreathingSpace from './components/BreathingSpace';
 import NoorChat from './components/NoorChat';
 import AuthScreen from './components/AuthScreen';
 import VerificationScreen from './components/VerificationScreen';
+import InAppVerification from './components/InAppVerification';
 import { LowEnergyCat, SteadyCat, RestlessCat } from './components/MorningIntentionIcons';
 
 // Firebase import
-import { onAuthStateChanged, signOut, User } from 'firebase/auth';
+import { onAuthStateChanged, signOut, User, updateProfile, applyActionCode } from 'firebase/auth';
 import { auth } from './firebase';
 
 // Local chatbot logic fallback
@@ -65,6 +66,11 @@ export default function App() {
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [unverifiedEmail, setUnverifiedEmail] = useState<string | null>(null);
+
+  // --- IN-APP EMAIL VERIFICATION STATES ---
+  const [verificationCode, setVerificationCode] = useState<string | null>(null);
+  const [verificationStatus, setVerificationStatus] = useState<'verifying' | 'success' | 'error' | null>(null);
+  const [verificationErrorMessage, setVerificationErrorMessage] = useState<string>('');
 
   // --- CORE APP STATES ---
   const [profile, setProfile] = useState<UserProfile>({
@@ -130,16 +136,73 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Sync Firebase user's displayName to profile name if set
+  // Detect email verification parameters in the URL
   useEffect(() => {
-    if (authUser && authUser.displayName && profile.name !== authUser.displayName) {
+    const params = new URLSearchParams(window.location.search);
+    const mode = params.get('mode');
+    const oobCode = params.get('oobCode');
+
+    if (mode === 'verifyEmail' && oobCode) {
+      setVerificationCode(oobCode);
+      setVerificationStatus('verifying');
+      
+      // Clean up search parameters immediately so refreshing the page doesn't run verification again
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
+
+  // Process the verification action code with Firebase Auth
+  useEffect(() => {
+    if (!verificationCode) return;
+
+    let isMounted = true;
+
+    const performVerification = async () => {
+      try {
+        await applyActionCode(auth, verificationCode);
+        if (isMounted) {
+          setVerificationStatus('success');
+          // Trigger the beautiful confetti animation to celebrate!
+          triggerConfetti();
+        }
+      } catch (error: any) {
+        console.error("Firebase applyActionCode verification failed:", error);
+        if (isMounted) {
+          setVerificationStatus('error');
+          let cleanMessage = "The verification link is invalid, expired, or has already been used.";
+          if (error?.code === 'auth/expired-action-code') {
+            cleanMessage = "This verification link has expired. Please sign in to request a new link.";
+          } else if (error?.code === 'auth/invalid-action-code') {
+            cleanMessage = "This verification link is invalid or has already been used.";
+          }
+          setVerificationErrorMessage(cleanMessage);
+        }
+      }
+    };
+
+    // Tiny 600ms delay to give a smooth transition feel
+    const timer = setTimeout(() => {
+      performVerification();
+    }, 600);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+    };
+  }, [verificationCode]);
+
+  // Sync Firebase user's displayName to profile name if set (only if local profile name is empty)
+  useEffect(() => {
+    if (authUser && authUser.displayName && !profile.name) {
       setProfile(prev => {
         const updated = {
           ...prev,
-          name: authUser.displayName || prev.name
+          name: authUser.displayName || ''
         };
         // Use user-scoped profile key
-        localStorage.setItem(`${STORAGE_PREFIX}${authUser.uid}_profile`, JSON.stringify(updated));
+        const isGuest = authUser.isAnonymous || authUser.email === 'guest@example.com';
+        const storage = isGuest ? sessionStorage : localStorage;
+        storage.setItem(`${STORAGE_PREFIX}${authUser.uid}_profile`, JSON.stringify(updated));
         return updated;
       });
     }
@@ -164,9 +227,11 @@ export default function App() {
     }
 
     const uid = authUser.uid;
+    const isGuest = authUser.isAnonymous || authUser.email === 'guest@example.com';
+    const storage = isGuest ? sessionStorage : localStorage;
 
     // 1. Profile load
-    const storedProfile = localStorage.getItem(`${STORAGE_PREFIX}${uid}_profile`);
+    const storedProfile = storage.getItem(`${STORAGE_PREFIX}${uid}_profile`);
     if (storedProfile) {
       try {
         setProfile(JSON.parse(storedProfile));
@@ -189,7 +254,7 @@ export default function App() {
     }
 
     // 2. Checkins load (completely blank state for new account!)
-    const storedCheckIns = localStorage.getItem(`${STORAGE_PREFIX}${uid}_checkins`);
+    const storedCheckIns = storage.getItem(`${STORAGE_PREFIX}${uid}_checkins`);
     if (storedCheckIns) {
       try {
         setCheckIns(JSON.parse(storedCheckIns));
@@ -201,7 +266,7 @@ export default function App() {
     }
 
     // 3. Journal entries load (completely blank state for new account!)
-    const storedJournals = localStorage.getItem(`${STORAGE_PREFIX}${uid}_journals`);
+    const storedJournals = storage.getItem(`${STORAGE_PREFIX}${uid}_journals`);
     if (storedJournals) {
       try {
         setJournalEntries(JSON.parse(storedJournals));
@@ -213,7 +278,7 @@ export default function App() {
     }
 
     // 4. Routines load or default templates
-    const storedRoutines = localStorage.getItem(`${STORAGE_PREFIX}${uid}_routines`);
+    const storedRoutines = storage.getItem(`${STORAGE_PREFIX}${uid}_routines`);
     if (storedRoutines) {
       try {
         setRoutines(JSON.parse(storedRoutines));
@@ -222,11 +287,11 @@ export default function App() {
       }
     } else {
       setRoutines(DEFAULT_ROUTINES);
-      localStorage.setItem(`${STORAGE_PREFIX}${uid}_routines`, JSON.stringify(DEFAULT_ROUTINES));
+      storage.setItem(`${STORAGE_PREFIX}${uid}_routines`, JSON.stringify(DEFAULT_ROUTINES));
     }
 
     // 5. Active Recovery steps (today's checked tasks)
-    const storedRecoverySteps = localStorage.getItem(`${STORAGE_PREFIX}${uid}_recovery_steps`);
+    const storedRecoverySteps = storage.getItem(`${STORAGE_PREFIX}${uid}_recovery_steps`);
     if (storedRecoverySteps) {
       try {
         setActiveRecoverySteps(JSON.parse(storedRecoverySteps));
@@ -238,7 +303,7 @@ export default function App() {
     }
 
     // 6. Morning Intention load
-    const storedMorningIntention = localStorage.getItem(`${STORAGE_PREFIX}${uid}_morning_intention`);
+    const storedMorningIntention = storage.getItem(`${STORAGE_PREFIX}${uid}_morning_intention`);
     if (storedMorningIntention) {
       try {
         setMorningIntention(JSON.parse(storedMorningIntention));
@@ -265,7 +330,9 @@ export default function App() {
   // Sync state to local storage helper
   const saveToLocalStorage = (key: string, data: any) => {
     if (authUser) {
-      localStorage.setItem(`${STORAGE_PREFIX}${authUser.uid}_${key}`, JSON.stringify(data));
+      const isGuest = authUser.isAnonymous || authUser.email === 'guest@example.com';
+      const storage = isGuest ? sessionStorage : localStorage;
+      storage.setItem(`${STORAGE_PREFIX}${authUser.uid}_${key}`, JSON.stringify(data));
     } else {
       localStorage.setItem(`${STORAGE_PREFIX}${key}`, JSON.stringify(data));
     }
@@ -291,6 +358,14 @@ export default function App() {
   const handleOnboardingComplete = (newProfile: UserProfile) => {
     setProfile(newProfile);
     saveToLocalStorage('profile', newProfile);
+    
+    // Keep Firebase user profile displayName in sync
+    if (auth.currentUser) {
+      updateProfile(auth.currentUser, { displayName: newProfile.name }).catch(err => {
+        console.warn("Failed to update Firebase user profile name:", err);
+      });
+    }
+
     showToast(`Welcome, ${newProfile.name}. We're so glad you are here.`);
   };
 
@@ -356,7 +431,9 @@ export default function App() {
   const handleResetMorningIntention = () => {
     setMorningIntention(null);
     if (authUser) {
-      localStorage.removeItem(`${STORAGE_PREFIX}${authUser.uid}_morning_intention`);
+      const isGuest = authUser.isAnonymous || authUser.email === 'guest@example.com';
+      const storage = isGuest ? sessionStorage : localStorage;
+      storage.removeItem(`${STORAGE_PREFIX}${authUser.uid}_morning_intention`);
     } else {
       localStorage.removeItem(`${STORAGE_PREFIX}morning_intention`);
     }
@@ -807,12 +884,14 @@ export default function App() {
   const handleClearAllData = () => {
     if (authUser) {
       const uid = authUser.uid;
-      localStorage.removeItem(`${STORAGE_PREFIX}${uid}_profile`);
-      localStorage.removeItem(`${STORAGE_PREFIX}${uid}_checkins`);
-      localStorage.removeItem(`${STORAGE_PREFIX}${uid}_journals`);
-      localStorage.removeItem(`${STORAGE_PREFIX}${uid}_routines`);
-      localStorage.removeItem(`${STORAGE_PREFIX}${uid}_recovery_steps`);
-      localStorage.removeItem(`${STORAGE_PREFIX}${uid}_morning_intention`);
+      const isGuest = authUser.isAnonymous || authUser.email === 'guest@example.com';
+      const storage = isGuest ? sessionStorage : localStorage;
+      storage.removeItem(`${STORAGE_PREFIX}${uid}_profile`);
+      storage.removeItem(`${STORAGE_PREFIX}${uid}_checkins`);
+      storage.removeItem(`${STORAGE_PREFIX}${uid}_journals`);
+      storage.removeItem(`${STORAGE_PREFIX}${uid}_routines`);
+      storage.removeItem(`${STORAGE_PREFIX}${uid}_recovery_steps`);
+      storage.removeItem(`${STORAGE_PREFIX}${uid}_morning_intention`);
     } else {
       localStorage.clear();
     }
@@ -844,7 +923,12 @@ export default function App() {
 
   const handleLogout = async () => {
     try {
+      const isGuest = authUser?.isAnonymous || authUser?.email === 'guest@example.com';
       await signOut(auth);
+      if (isGuest) {
+        // Explicitly clear all session storage on guest logout so no data remains
+        sessionStorage.clear();
+      }
       showToast("Signed out gently. Return when you need space.");
     } catch (e) {
       console.error("Logout failed:", e);
@@ -886,7 +970,23 @@ export default function App() {
     showToast("Signed in successfully.");
   };
 
-  const isEmailUnverified = authUser && !authUser.emailVerified;
+  // Render custom in-app email verification screen if processing a verification link click
+  if (verificationStatus) {
+    return (
+      <InAppVerification
+        status={verificationStatus}
+        errorMessage={verificationErrorMessage}
+        onContinue={() => {
+          setVerificationStatus(null);
+          setVerificationCode(null);
+          setVerificationErrorMessage('');
+        }}
+      />
+    );
+  }
+
+  const isGuest = authUser && (authUser.isAnonymous || authUser.email === 'guest@example.com');
+  const isEmailUnverified = authUser && !authUser.emailVerified && !isGuest;
 
   if (unverifiedEmail || isEmailUnverified) {
     const displayEmail = unverifiedEmail || (authUser ? authUser.email : '');

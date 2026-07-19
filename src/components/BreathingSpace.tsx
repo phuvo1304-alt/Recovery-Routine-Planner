@@ -13,31 +13,105 @@ export default function BreathingSpace({ onClose, onComplete }: BreathingSpacePr
   const [phase, setPhase] = useState<BreathPhase>('idle');
   const [timeLeft, setTimeLeft] = useState(60);
   const [cycleCount, setCycleCount] = useState(0);
-  const [soundEnabled, setSoundEnabled] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
   const [audioContext, setAudioContext] = useState<AudioContext | null>(null);
 
-  // Gentle synthesizer for breathing instructions
-  const playTone = (frequency: number, duration: number, type: 'sine' | 'triangle' = 'sine') => {
+  // Play a beautiful, rich, multi-layered melodic soundscape
+  const playBreathingSound = (currentPhase: BreathPhase) => {
     if (!soundEnabled) return;
     try {
       const ctx = audioContext || new (window.AudioContext || (window as any).webkitAudioContext)();
       if (!audioContext) setAudioContext(ctx);
-      
-      const osc = ctx.createOscillator();
-      const gainNode = ctx.createGain();
-      
-      osc.type = type;
-      osc.frequency.setValueAtTime(frequency, ctx.currentTime);
-      
-      gainNode.gain.setValueAtTime(0.01, ctx.currentTime);
-      gainNode.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.1);
-      gainNode.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
-      
-      osc.connect(gainNode);
-      gainNode.connect(ctx.destination);
-      
-      osc.start();
-      osc.stop(ctx.currentTime + duration);
+
+      // Ensure the AudioContext is active (browsers restrict autoplay until interaction)
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+
+      const now = ctx.currentTime;
+
+      // We'll use a warm low-pass filter to make all sounds extremely soft, deep, and comforting
+      const filter = ctx.createBiquadFilter();
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(650, now); // Soft cutoff for a smooth ambient warmth
+      filter.Q.setValueAtTime(1.2, now);
+      filter.connect(ctx.destination);
+
+      // Helper to trigger a single premium-quality note with independent envelopes
+      const playSoothingNote = (
+        freq: number, 
+        startTimeOffset: number, 
+        attack: number, 
+        sustain: number, 
+        release: number, 
+        peakVolume: number, 
+        waveType: 'sine' | 'triangle' = 'sine'
+      ) => {
+        const osc = ctx.createOscillator();
+        const gainNode = ctx.createGain();
+
+        osc.type = waveType;
+        osc.frequency.setValueAtTime(freq, now + startTimeOffset);
+
+        // Configure a highly smooth volume envelope (Attack-Sustain-Release) to avoid clicks
+        gainNode.gain.setValueAtTime(0, now + startTimeOffset);
+        
+        // Attack: gradual fade-in
+        gainNode.gain.linearRampToValueAtTime(peakVolume, now + startTimeOffset + attack);
+        
+        // Sustain phase
+        gainNode.gain.setValueAtTime(peakVolume, now + startTimeOffset + attack + sustain);
+        
+        // Release: gradual organic exponential fade-out
+        gainNode.gain.exponentialRampToValueAtTime(0.0001, now + startTimeOffset + attack + sustain + release);
+
+        osc.connect(gainNode);
+        gainNode.connect(filter);
+
+        osc.start(now + startTimeOffset);
+        osc.stop(now + startTimeOffset + attack + sustain + release + 0.1);
+      };
+
+      if (currentPhase === 'inhale') {
+        // --- INHALE (4s): Rising, uplifting F Major 9 chord cascade ---
+        // Mimics drawing in peaceful energy with an angelic, arpeggiated swell
+        const notes = [
+          { f: 174.61, delay: 0.0, vol: 0.09, type: 'triangle' }, // F3 (Deep warm floor)
+          { f: 261.63, delay: 0.25, vol: 0.07, type: 'sine' },    // C4 (Balanced harmony)
+          { f: 329.63, delay: 0.5, vol: 0.06, type: 'sine' },     // E4 (Serene major 7th)
+          { f: 392.00, delay: 0.75, vol: 0.05, type: 'triangle' }, // G4 (Airy major 9th)
+          { f: 440.00, delay: 1.0, vol: 0.04, type: 'sine' },     // A4 (Sweet brightness)
+          { f: 523.25, delay: 1.25, vol: 0.03, type: 'sine' }     // C5 (Summit clarity)
+        ] as const;
+
+        notes.forEach(note => {
+          // Play with a sweet, long swell: 1.5s attack, 1.2s sustain, 1.0s release
+          playSoothingNote(note.f, note.delay, 1.5, 1.2, 1.0, note.vol, note.type);
+        });
+
+      } else if (currentPhase === 'hold') {
+        // --- HOLD (4s): Ethereal, suspended crystal chime ---
+        // A single suspended high fifth interval that floats in space,
+        // conveying perfect silence, stillness, and mindful presence.
+        playSoothingNote(329.63, 0.0, 1.0, 1.5, 1.2, 0.05, 'sine'); // E4
+        playSoothingNote(659.25, 0.2, 1.2, 1.3, 1.2, 0.02, 'sine'); // E5 (High delicate crystal bell)
+
+      } else if (currentPhase === 'exhale') {
+        // --- EXHALE (6s): Warm, grounding C Major resolution cascade ---
+        // Deep tones resolving downward with a very long decay, mimicking a relaxing sigh of relief
+        const notes = [
+          { f: 130.81, delay: 0.0, vol: 0.10, type: 'triangle' }, // C3 (Deep comforting grounding root)
+          { f: 196.00, delay: 0.3, vol: 0.08, type: 'sine' },     // G3 (Perfect fifth stability)
+          { f: 261.63, delay: 0.6, vol: 0.07, type: 'sine' },     // C4 (Heart-center resolution)
+          { f: 329.63, delay: 0.9, vol: 0.05, type: 'sine' },     // E4 (Warm major third relief)
+          { f: 392.00, delay: 1.2, vol: 0.03, type: 'sine' }      // G4 (Whisper fading away into quietness)
+        ] as const;
+
+        notes.forEach(note => {
+          // Play with a deep, ultra-slow release: 1.8s attack, 1.5s sustain, 2.5s slow release
+          playSoothingNote(note.f, note.delay, 1.8, 1.5, 2.5, note.vol, note.type);
+        });
+      }
     } catch (e) {
       console.warn("Audio Context error", e);
     }
@@ -70,21 +144,21 @@ export default function BreathingSpace({ onClose, onComplete }: BreathingSpacePr
 
       // PHASE 1: Inhale (4 seconds)
       setPhase('inhale');
-      playTone(349.23, 1.5, 'triangle'); // F4 Note - warm and clear
+      playBreathingSound('inhale');
       
       timeoutId = setTimeout(() => {
         if (timeLeft <= 0) return;
         
         // PHASE 2: Hold (4 seconds)
         setPhase('hold');
-        playTone(392.00, 0.5); // G4 Note - stabilizing
+        playBreathingSound('hold');
         
         timeoutId = setTimeout(() => {
           if (timeLeft <= 0) return;
           
           // PHASE 3: Exhale (6 seconds)
           setPhase('exhale');
-          playTone(293.66, 2.5); // D4 Note - deep and grounding
+          playBreathingSound('exhale');
           
           timeoutId = setTimeout(() => {
             setCycleCount(prev => prev + 1);
