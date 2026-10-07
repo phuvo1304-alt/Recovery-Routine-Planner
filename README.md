@@ -14,7 +14,7 @@ Burnout recovery apps tend to feel like more homework: habit trackers, streaks, 
 - **Daily Check-In** — mood, energy, sleep quality, and stress logged in a few taps, which generates 3 personalized micro-recovery steps for the day
 - **Recovery Routines** — pre-built and fully custom step-by-step routines you can activate, edit, or build from scratch
 - **Reflection Journal** — rotating gentle prompts, saved entries you can revisit
-- **Noor, the AI companion** — a Gemini-powered chat that validates how you're feeling and suggests small, concrete next steps (with a local rule-based fallback if the API is unavailable, so the app still feels supportive offline)
+- **Noor, the AI companion** — a custom-prompted layer on top of Gemini: a defined persona (validates first, keeps replies short and non-generic), a structured response format that always returns actionable suggestion chips alongside the reply, and a local rule-based fallback if the API is unavailable
 - **Built-in safety net** — messages containing crisis language (self-harm, suicidal ideation) immediately surface real crisis resources instead of an AI reply
 - **1-Minute Breathing Space** — a guided breathing exercise for in-the-moment grounding
 - **Accounts via Firebase Auth** — email/password with in-app email verification, or a guest/anonymous mode that keeps data session-only
